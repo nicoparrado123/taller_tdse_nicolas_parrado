@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Web App</title>
+    <style>
+        body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { color: #333; }
+        section { margin-bottom: 1.5rem; border: 1px solid #ddd; padding: 1rem; border-radius: 6px; }
+        input { padding: 0.4rem; margin-right: 0.5rem; }
+        button { padding: 0.4rem 0.9rem; cursor: pointer; }
+        #result { background: #f0f8ff; padding: 0.8rem; white-space: pre; border-radius: 4px; min-height: 2rem; }
+        #error  { color: #c00; min-height: 1.2rem; }
+        #loading { color: #888; }
+        .images { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .images img { width: 180px; height: 120px; object-fit: cover; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Mini Web App</h1>
+
+    <section>
+        <h2>Greeting</h2>
+        <form id="greetingForm">
+            <input type="text" id="greetingName" placeholder="Your name" required>
+            <button type="submit">Greet</button>
+        </form>
+    </section>
+
+    <section>
+        <h2>Square</h2>
+        <form id="squareForm">
+            <input type="number" id="squareValue" placeholder="Enter a number" required>
+            <button type="submit">Calculate</button>
+        </form>
+    </section>
+
+    <section>
+        <h2>Server Time</h2>
+        <button id="timeBtn">Get Time</button>
+    </section>
+
+    <section>
+        <h2>Health</h2>
+        <button id="healthBtn">Check Health</button>
+    </section>
+
+    <section>
+        <h2>Response</h2>
+        <p id="loading" hidden>Loading...</p>
+        <p id="error"></p>
+        <pre id="result"></pre>
+    </section>
+
+    <section>
+        <h2>Images served by this server</h2>
+        <div class="images">
+            <img src="/images/photo1.jpg" alt="Photo 1">
+            <img src="/images/photo2.png" alt="Photo 2">
+        </div>
+    </section>
+
+    <script src="/app.js"></script>
+</body>
+</html>
