@@ -168,46 +168,23 @@ Cubren: escape de JSON, parseo de query params, decodificación de URL encoding,
 
 ## Despliegue en EC2
 
+1. Crear instancia EC2 con Amazon Linux 2023, tipo `t2.micro`
+2. En el Security Group abrir puerto `22` (SSH) y `35000` (app)
+3. Conectarse con EC2 Instance Connect desde la consola de AWS
+4. Instalar Java:
 ```bash
-# empaquetar
-mvn package
-
-# subir a la instancia
+sudo dnf install java-17-amazon-corretto -y
+```
+5. Subir el jar y los recursos desde la máquina local:
+```bash
 scp -i <key.pem> target/webserver.jar ec2-user@<EC2-IP>:~/
 scp -i <key.pem> -r src/main/resources/static ec2-user@<EC2-IP>:~/src/main/resources/
-
-# instalar Java en Amazon Linux 2023
-sudo dnf install java-17-amazon-corretto -y
-
-# verificar desde la instancia antes de abrir al exterior
-curl http://localhost:35000/api/health
-
-# correr
+```
+6. Correr el servidor:
+```bash
 java -jar webserver.jar 35000
 ```
-
-Para que quede corriendo después de cerrar sesión, configurar como servicio systemd:
-
-```ini
-[Unit]
-Description=Mini Web Server
-
-[Service]
-ExecStart=/usr/bin/java -jar /home/ec2-user/webserver.jar 35000
-WorkingDirectory=/home/ec2-user
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable webserver
-sudo systemctl start webserver
-```
-
-Security group: puerto 22 solo desde tu IP, puerto 35000 abierto para el browser.
+7. Abrir `http://<EC2-IP>:35000` en el browser
 
 ---
 
@@ -264,28 +241,28 @@ Si dos browsers hacen peticiones al mismo tiempo, la segunda espera hasta que la
 ## Preguntas de reflexión
 
 **1. ¿Por qué una sola página HTML genera varias peticiones HTTP?**
-El browser analiza el HTML y descubre recursos adicionales referenciados: `app.js` en la etiqueta `<script>`, las imágenes en las etiquetas `<img>`, y el favicon. Por cada uno genera una petición HTTP separada. Lo que parece una sola acción del usuario produce al menos 4 requests al servidor.
+El browser descubre recursos adicionales en el HTML: el script, las imágenes y el favicon. Por cada uno genera una petición separada, así que una sola página produce al menos 4 requests.
 
 **2. ¿Por qué las imágenes deben tratarse como bytes y no como texto?**
-Los archivos de imagen son datos binarios. Si se leen como texto, Java intenta interpretar los bytes como caracteres usando un encoding, lo que corrompe los bytes que no corresponden a caracteres válidos. Leer como bytes y escribir como bytes garantiza que el contenido llega al browser exactamente igual a como está en disco.
+Las imágenes son datos binarios. Leerlas como texto corrompe los bytes que no corresponden a caracteres válidos. Leer y escribir como bytes garantiza que el contenido llega intacto al browser.
 
 **3. ¿Cuál es el rol del Content-Type en la respuesta?**
-Le dice al browser cómo interpretar los bytes que recibe. Con `text/html` construye el DOM, con `application/javascript` ejecuta el código, con `image/jpeg` decodifica píxeles, con `application/json` permite que `fetch` parsee la respuesta. Un Content-Type incorrecto hace que el browser muestre basura o ignore el recurso.
+Le dice al browser cómo interpretar los bytes recibidos: construir el DOM, ejecutar JavaScript, decodificar píxeles o parsear JSON. Sin él el browser adivina y puede mostrar basura.
 
 **4. ¿Qué está hardcodeado en este diseño y qué generalizaría un framework?**
-Está hardcodeado: la lista de rutas en el `switch`, los nombres de parámetros, los mensajes de error, el directorio de recursos estáticos, y el mapeo de extensiones a content-types. Un framework generalizaría el enrutamiento con anotaciones, la deserialización de parámetros, y el manejo de errores. El `switch` explícito hace visible exactamente qué path hace qué, que es el objetivo de este laboratorio.
+Está hardcodeado: las rutas en el `switch`, los nombres de parámetros, los mensajes de error y el mapeo de extensiones a content-types. Un framework generalizaría todo eso con anotaciones y configuración. El `switch` explícito hace visible exactamente qué path hace qué.
 
 **5. ¿Por qué el browser puede seguir respondiendo mientras el servidor atiende secuencialmente?**
-Porque son dos cosas distintas. El browser ejecuta JavaScript en su propio hilo y `fetch` es no bloqueante: lanza la petición y continúa ejecutando código. El servidor Java es el que bloquea: mientras atiende una conexión no acepta la siguiente. La asincronía está en el cliente, no en el servidor.
+`fetch` es no bloqueante: lanza la petición y el browser sigue ejecutando código. El servidor es el que bloquea. La asincronía está en el cliente, no en el servidor.
 
 **6. ¿Qué cambió al mover el servidor a EC2? ¿Qué no cambió?**
-Cambió: la dirección IP (de `localhost` a una IP pública), la red por la que viajan los paquetes (Internet en lugar de loopback), y el entorno de ejecución (Linux en lugar de Windows local). No cambió: el código Java, el comportamiento del servidor, la estructura de las peticiones HTTP, la secuencialidad, ni las limitaciones de capacidad. EC2 cambia dónde corre el servidor, no cómo funciona.
+Cambió la IP, la red y el sistema operativo. No cambió el código, el comportamiento, ni la secuencialidad. EC2 cambia dónde corre el servidor, no cómo funciona.
 
-**7. ¿Qué pasa cuando dos usuarios envían peticiones lentas casi al mismo tiempo?**
-El servidor atiende la primera conexión completa antes de llamar `accept()` de nuevo. La segunda conexión queda en la cola del sistema operativo. El segundo usuario espera sin respuesta hasta que el primero termina. Si la primera petición tarda 10 segundos, el segundo usuario espera al menos 10 segundos antes de que el servidor siquiera lea su request.
+**7. ¿Qué pasa cuando dos usuarios envían peticiones al mismo tiempo?**
+El servidor atiende la primera completa antes de aceptar la siguiente. La segunda queda en la cola del sistema operativo esperando, sin importar cuánto tarde la primera.
 
 **8. ¿Cuál es la siguiente limitación a resolver, y por qué la concurrencia va antes que el balanceo de carga?**
-La siguiente limitación es la secuencialidad. Agregar threads permite que el servidor atienda varias conexiones al mismo tiempo en la misma máquina, sin costo adicional de infraestructura. El balanceo de carga distribuye trabajo entre múltiples instancias, pero si cada instancia sigue siendo de un hilo, solo se multiplica el problema. Primero hay que hacer que una instancia sea eficiente, luego escalar horizontalmente.
+La secuencialidad. Agregar threads permite atender varias conexiones en la misma máquina sin costo extra. El balanceo de carga entre instancias no sirve si cada instancia sigue siendo de un hilo: primero hay que hacer eficiente una instancia, luego escalar.
 
 ---
 
